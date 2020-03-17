@@ -12,8 +12,9 @@
  */
 #include <pthread.h>
 #include <time.h>
-#include "errors.h"
 
+#include "errors.h"
+#include <ctype.h> 
 /*
  * The "alarm" structure now contains the time_t (time since the
  * Epoch, in seconds) for each alarm, so that they can be
@@ -26,6 +27,8 @@ typedef struct alarm_tag {
     int                 seconds;
     time_t              time;   /* seconds from EPOCH */
     char                message[64];
+    int                 alarm_id;
+    int                 group_id;
 } alarm_t;
 
 pthread_mutex_t alarm_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -156,8 +159,24 @@ int main (int argc, char *argv[])
 {
     int status;
     char line[128];
+    char request[100];
+    char group[100];
+    const char delim[2] = "(";
+	char *token;
+    char *command;
+    char *num;
+    char *id; 
+    char *p;
+    char *c;
+    char *group_req;
+    char *group_num;
+    char *group_id;
+    int isDigit = 0;
+    int isDigitGroup = 0;
+	pthread_t thread;
+	const char delim1[2] = "(";
+    const char delim2[2] = ")";
     alarm_t *alarm;
-    pthread_t thread;
 
     status = pthread_create (
         &thread, NULL, alarm_thread, NULL);
@@ -175,12 +194,74 @@ int main (int argc, char *argv[])
          * Parse input line into seconds (%d) and a message
          * (%64[^\n]), consisting of up to 64 characters
          * separated from the seconds by whitespace.
+         * 
+         * request will hold the request type as well as the alarm id
+         * so will be of the form Start_Alarm(12): or Change_Alarm(12):
+         * 
+         * group will hold the group and id. of the form:
+         * Group(12) 
          */
-        if (sscanf (line, "%d %64[^\n]", 
-            &alarm->seconds, alarm->message) < 2) {
+        if (sscanf (line, "%s %s %d %64[^\n]", 
+            request, group, &alarm->seconds, alarm->message) < 1) {
             fprintf (stderr, "Bad command\n");
             free (alarm);
         } else {
+            command = strtok(request, delim1);
+            num = strtok(NULL, delim1);
+            group_req = strtok(group, delim1);
+            group_num = strtok(NULL, delim1);
+            /*Check if string contains ')' and if so, split by delimeter2*/
+			if (command != NULL && num != NULL && strchr(num, ')') != NULL) id = strtok(num, delim2);
+            /*Check if  group string contains ')' and if so, split by delimeter2*/
+            if(group_req != NULL && group_num != NULL && strchr(group_num, ')') != NULL) group_id = strtok(group_num, delim2);
+            /*Check if both ids  were inputted*/
+			if (id == NULL || strlen(id) == 0 || group_id == NULL || strlen(group_id) == 0) fprintf(stderr, "Bad Command\n");
+            
+            /*Check if command is either Change_Alarm or Start_Alarm and that Group is part of the list*/
+			else if ((strcmp(command, "Change_Alarm") != 0 && strcmp(command, "Start_Alarm") != 0) || strcmp(group_req, "Group") != 0) fprintf(stderr, "Bad Command\n");
+            
+            else {	
+				/*Check if alarm id is all numbers*/
+				for (p = id; *p; p++) {
+				   if (!isdigit(*p)) {
+					   printf("Bad Command\n");
+					   isDigit = 1;
+					   break;
+				   }				   
+			   }
+
+               for(c = group_id; *c; c++) {
+                    if (!isdigit(*c)) {
+					   printf("Bad Command\n");
+					   isDigitGroup = 1;
+					   break;
+				    }
+               }
+
+            }
+            /*if alarm id all digits, convert to number*/
+            if (isDigit == 0 && isDigitGroup == 0) {
+				int numid = atoi(id);
+                int groupid = atoi(group_id);
+                if(numid < 0 || groupid < 0){
+                    printf("Bad Command\n");
+                    break;
+                }
+				alarm->alarm_id = numid;
+                alarm->group_id = groupid;
+            }
+
+            if(strcmp(command, "Change_Alarm") == 0){
+                // do change alarm stuff
+            } else if(strcmp(command, "Start_Alarm") == 0){
+                // do the start alarm stuff
+                printf("\n%s\n", command);
+                printf("\n%d\n", alarm->alarm_id);
+                printf("\n%d\n", alarm->group_id);
+            }
+            
+
+
             status = pthread_mutex_lock (&alarm_mutex);
             if (status != 0)
                 err_abort (status, "Lock mutex");
