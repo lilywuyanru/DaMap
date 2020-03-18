@@ -73,8 +73,8 @@ void alarm_insert (alarm_t *alarm)
 #ifdef DEBUG
     printf ("[list: ");
     for (next = alarm_list; next != NULL; next = next->link)
-        printf ("%d(%d)[\"%s\"] ", next->time,
-            next->time - time (NULL), next->message);
+        printf ("(%ld)[\"%s\"] ", next->time,
+            next->message);
     printf ("]\n");
 #endif
     /*
@@ -254,26 +254,19 @@ int main (int argc, char *argv[])
             if(strcmp(command, "Change_Alarm") == 0){
                 // do change alarm stuff
             } else if(strcmp(command, "Start_Alarm") == 0){
-                // do the start alarm stuff
-                printf("\n%s\n", command);
-                printf("\n%d\n", alarm->alarm_id);
-                printf("\n%d\n", alarm->group_id);
+                status = pthread_mutex_lock (&alarm_mutex);
+                if (status != 0)
+                    err_abort (status, "Lock mutex");
+                alarm->time = time (NULL) + alarm->seconds;
+                /*
+                * Insert the new alarm into the list of alarms,
+                * sorted by expiration time.
+                */
+                alarm_insert (alarm);
+                status = pthread_mutex_unlock (&alarm_mutex);
+                if (status != 0)
+                    err_abort (status, "Unlock mutex");
             }
-            
-
-
-            status = pthread_mutex_lock (&alarm_mutex);
-            if (status != 0)
-                err_abort (status, "Lock mutex");
-            alarm->time = time (NULL) + alarm->seconds;
-            /*
-             * Insert the new alarm into the list of alarms,
-             * sorted by expiration time.
-             */
-            alarm_insert (alarm);
-            status = pthread_mutex_unlock (&alarm_mutex);
-            if (status != 0)
-                err_abort (status, "Unlock mutex");
         }
     }
 }
