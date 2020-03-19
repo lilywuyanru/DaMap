@@ -53,7 +53,7 @@ void alarm_insert (alarm_t *alarm)
     last = &alarm_list;
     next = *last;
     while (next != NULL) {
-        if (next->time >= alarm->time) {
+        if (next->alarm_id >= alarm->alarm_id) {
             alarm->link = next;
             *last = alarm;
             break;
@@ -96,10 +96,12 @@ void alarm_insert (alarm_t *alarm)
  */
 void *alarm_thread (void *arg)
 {
-    alarm_t *alarm;
+    alarm_t *alarm; //holds alarm that will be looked at next to print
+    alarm_t *iterator, *iter2; //temp pointers to navigate linked list
+    alarm_t *prev; //holds ref to alarm before current alarm in list in order to remove alarms from the list
     struct timespec cond_time;
     time_t now;
-    int status, expired;
+    int status, expired, removed;
 
     /*
      * Loop forever, processing commands. The alarm thread will
@@ -116,14 +118,49 @@ void *alarm_thread (void *arg)
          * added. Setting current_alarm to 0 informs the insert
          * routine that the thread is not busy.
          */
+
         current_alarm = 0;
         while (alarm_list == NULL) {
             status = pthread_cond_wait (&alarm_cond, &alarm_mutex);
             if (status != 0)
                 err_abort (status, "Wait on cond");
             }
-        alarm = alarm_list;
-        alarm_list = alarm->link;
+        alarm = alarm_list; //initialize these pointers to the start of the list
+        iter2 = alarm_list;
+        iterator = alarm_list;
+        prev = NULL; //initialize the previous node ref to NULL as at the start of a list, there is no previous
+        removed = 0;
+        //while not at the end of the list
+        while(iterator->link != NULL){
+            //if there is an alarm that expires sooner, remove it from the list
+            if(iterator->time < alarm->time){
+                alarm = iterator;
+            }
+            iterator = iterator->link;
+        }
+        //if there is the only one node in the list remove it. 
+        if(iter2->link == NULL){
+            alarm_list = NULL;
+        } else {
+            //while not at the end of the list and no node has been removed
+            while(iter2->link!=NULL && !removed){
+                //if an alarm has the same time, it has been found
+                if(iter2->time == alarm->time){
+                    //remove from list. If it is at the start update the "HEAD" or array_list
+                    if(prev == NULL){
+                        alarm_list = alarm->link;
+                    //if not at start, remove by changing the previous link to the node after the node being removed
+                    } else {
+                        prev->link = iter2->link;
+                    }
+                    //update boolean to stop searching
+                    removed = 1;
+                }
+                //continue traversing the list
+                prev = iter2;
+                iter2 = iter2->link;
+            }
+        }
         now = time (NULL);
         expired = 0;
         if (alarm->time > now) {
@@ -255,25 +292,21 @@ int main (int argc, char *argv[])
                 // do change alarm stuff
             } else if(strcmp(command, "Start_Alarm") == 0){
                 // do the start alarm stuff
-                printf("\n%s\n", command);
-                printf("\n%d\n", alarm->alarm_id);
-                printf("\n%d\n", alarm->group_id);
-            }
-            
-
-
+                
             status = pthread_mutex_lock (&alarm_mutex);
             if (status != 0)
                 err_abort (status, "Lock mutex");
-            alarm->time = time (NULL) + alarm->seconds;
-            /*
-             * Insert the new alarm into the list of alarms,
-             * sorted by expiration time.
-             */
-            alarm_insert (alarm);
-            status = pthread_mutex_unlock (&alarm_mutex);
-            if (status != 0)
-                err_abort (status, "Unlock mutex");
+                alarm->time = time (NULL) + alarm->seconds;
+                /*
+                * Insert the new alarm into the list of alarms,
+                * sorted by expiration time.
+                */
+                alarm_insert (alarm);
+                status = pthread_mutex_unlock (&alarm_mutex);
+                if (status != 0)
+                    err_abort (status, "Unlock mutex");
+            }
+            
         }
     }
 }
