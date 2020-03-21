@@ -97,7 +97,7 @@ void alarm_insert (alarm_t *alarm)
 void *alarm_thread (void *arg)
 {
     alarm_t *alarm; //holds alarm that will be looked at next to print
-    alarm_t *iterator, *iter2; //temp pointers to navigate linked list
+    alarm_t *iterator, *iter2, *tmp; //temp pointers to navigate linked list
     alarm_t *prev; //holds ref to alarm before current alarm in list in order to remove alarms from the list
     struct timespec cond_time;
     time_t now;
@@ -126,6 +126,7 @@ void *alarm_thread (void *arg)
                 err_abort (status, "Wait on cond");
             }
         alarm = alarm_list; //initialize these pointers to the start of the list
+        tmp = alarm_list;
         iter2 = alarm_list;
         iterator = alarm_list;
         prev = NULL; //initialize the previous node ref to NULL as at the start of a list, there is no previous
@@ -133,13 +134,13 @@ void *alarm_thread (void *arg)
         //while not at the end of the list
         while(iterator->link != NULL){
             //if there is an alarm that expires sooner, remove it from the list
-            if(iterator->time < alarm->time){
-                alarm = iterator;
+            if(iterator->time < tmp->time){
+                tmp = iterator;
             }
-            iterator = iterator->link;
+            iterator = tmp->link;
         }
         //if there is the only one node in the list remove it. 
-
+        alarm = tmp;
         now = time (NULL);
         expired = 0;
         if (alarm->time > now) {
