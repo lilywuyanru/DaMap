@@ -15,6 +15,7 @@
 
 #include "errors.h"
 #include <ctype.h> 
+#include <semaphore.h>
 /*
  * The "alarm" structure now contains the time_t (time since the
  * Epoch, in seconds) for each alarm, so that they can be
@@ -22,6 +23,8 @@
  * enough, since the "alarm thread" cannot tell how long it has
  * been on the list.
  */
+sem_t sem;
+
 typedef struct alarm_tag {
     struct alarm_tag    *link;
     int                 seconds;
@@ -29,6 +32,8 @@ typedef struct alarm_tag {
     char                message[64];
     int                 alarm_id;
     int                 group_id;
+    int                 change; // change variable indicates the different messages it prints in display_thread 
+    int                 remove; // remove variable 
 } alarm_t;
 
 pthread_mutex_t alarm_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -73,7 +78,7 @@ void alarm_insert (alarm_t *alarm)
 #ifdef DEBUG
     printf ("[list: ");
     for (next = alarm_list; next != NULL; next = next->link)
-        printf ("%d(%d)[\"%s\"] ", next->time,
+        printf ("%ld(%ld)[\"%s\"] ", next->time,
             next->time - time (NULL), next->message);
     printf ("]\n");
 #endif
@@ -127,10 +132,10 @@ void *alarm_thread (void *arg)
         now = time (NULL);
         expired = 0;
         if (alarm->time > now) {
-#ifdef DEBUG
-            printf ("[waiting: %d(%d)\"%s\"]\n", alarm->time,
+// #ifdef DEBUG
+            printf ("[waiting: %ld(%ld)\"%s\"]\n", alarm->time,
                 alarm->time - time (NULL), alarm->message);
-#endif
+// #endif
             cond_time.tv_sec = alarm->time;
             cond_time.tv_nsec = 0;
             current_alarm = alarm->time;
@@ -155,6 +160,89 @@ void *alarm_thread (void *arg)
     }
 }
 
+void *display_thread (void *arg) {
+    alarm_t *alarm;
+    struct timespec cond_time;
+    time_t now;
+    int status;
+    int group_id;        // holds group id that display thread is going to print
+    int display_thread_id; //just gonna leave this for now
+    alarm_t *next;
+
+    // this is the reader writer model we are trying to implement here
+    // rc ++;
+    // if (rc == 1)
+    // signal(mutex);
+    // .
+    // .  READ THE OBJECT
+    // .
+    // wait(mutex);
+    // rc --;
+    // if (rc == 0)
+    // signal (wrt);
+    // signal(mutex);
+
+    while (1) { // while unchanged
+
+       //lock reader
+		status = pthread_mutex_lock (&mutex);
+		if (status != 0)
+		    err_abort (status, "Lock mutex");
+		read_count++;
+		if (read_count == 1)
+		{
+		    status = pthread_mutex_lock (&rw_mutex);
+            if (status != 0)
+                err_abort (status, "Lock mutex");
+		}
+		status = pthread_mutex_unlock (&mutex);
+	            if (status != 0)
+	                err_abort (status, "Unlock mutex");
+	
+
+
+        // when change variable is 0, indicates no change
+        if(alarm->change == 0) {
+            printf("\nAlarm(%d) printed by Alarm Display Thread %d at %ld: Group(%d) %s.",
+                alarm->alarm_id, display_thread_id, time (NULL), alarm->message);
+        }
+
+        // when change variable is 1, indicates groupd id has been changed
+        else if(alarm->change == 1) {
+            printf("\nDisplay Thread %d Has Stopped Printing Message of Alarm (%d) at %ld: Changed Group(%d) %s.",
+                display_thread_id, alarm->alarm_id, time (NULL), alarm->message);
+        }
+
+        // when change variable is 2, indicates groupd id has NOT been changed but message has been changed
+        else if(alarm->change == 2) {
+            printf("\nDisplay Thread %d Starts to Print Changed Message Alarm(%d) at %ld: Group(%d) %s.",
+                display_thread_id, alarm->alarm_id, time (NULL), alarm->message);
+        }
+        
+        if (alarm-> remove == 1) {
+            
+        }
+
+		//unlock reader
+        status = pthread_mutex_lock (&alarm_mutex);
+	    if (status != 0)
+	        err_abort (status, "Lock mutex");
+		read_count--;
+		if (read_count == 0)
+		{
+		    status = pthread_mutex_unlock (&rw_mutex);
+	        if (status != 0)
+	            err_abort (status, "Unlock mutex");
+		}
+		status = pthread_mutex_unlock (&mutex);
+	        if (status != 0)
+	            err_abort (status, "Unlock mutex");
+
+		sleep(5); 
+    }
+}
+
+
 int main (int argc, char *argv[])
 {
     int status;
@@ -177,6 +265,8 @@ int main (int argc, char *argv[])
 	const char delim1[2] = "(";
     const char delim2[2] = ")";
     alarm_t *alarm;
+
+    sem_open("SEM", 0, 1);
 
     status = pthread_create (
         &thread, NULL, alarm_thread, NULL);
@@ -259,7 +349,6 @@ int main (int argc, char *argv[])
                 printf("\n%d\n", alarm->alarm_id);
                 printf("\n%d\n", alarm->group_id);
             }
-            
 
 
             status = pthread_mutex_lock (&alarm_mutex);
@@ -270,10 +359,18 @@ int main (int argc, char *argv[])
              * Insert the new alarm into the list of alarms,
              * sorted by expiration time.
              */
+      
             alarm_insert (alarm);
             status = pthread_mutex_unlock (&alarm_mutex);
             if (status != 0)
                 err_abort (status, "Unlock mutex");
+
+            // printf("semaphore: %d \n", sem);
+
+            // sem_wait(&sem);
+
+            // sem_post(&sem);
+
         }
     }
 }
