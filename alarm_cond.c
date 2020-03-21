@@ -70,13 +70,13 @@ void alarm_insert (alarm_t *alarm)
         *last = alarm;
         alarm->link = NULL;
     }
-#ifdef DEBUG
+// #ifdef DEBUG
     printf ("[list: ");
     for (next = alarm_list; next != NULL; next = next->link)
-        printf ("%d(%d)[\"%s\"] ", next->time,
+        printf ("%ld(%ld)[\"%s\"] ", next->time,
             next->time - time (NULL), next->message);
     printf ("]\n");
-#endif
+// #endif
     /*
      * Wake the alarm thread if it is not busy (that is, if
      * current_alarm is 0, signifying that it's waiting for
@@ -139,35 +139,14 @@ void *alarm_thread (void *arg)
             iterator = iterator->link;
         }
         //if there is the only one node in the list remove it. 
-        if(iter2->link == NULL){
-            alarm_list = NULL;
-        } else {
-            //while not at the end of the list and no node has been removed
-            while(iter2->link!=NULL && !removed){
-                //if an alarm has the same time, it has been found
-                if(iter2->time == alarm->time){
-                    //remove from list. If it is at the start update the "HEAD" or array_list
-                    if(prev == NULL){
-                        alarm_list = alarm->link;
-                    //if not at start, remove by changing the previous link to the node after the node being removed
-                    } else {
-                        prev->link = iter2->link;
-                    }
-                    //update boolean to stop searching
-                    removed = 1;
-                }
-                //continue traversing the list
-                prev = iter2;
-                iter2 = iter2->link;
-            }
-        }
+
         now = time (NULL);
         expired = 0;
         if (alarm->time > now) {
-#ifdef DEBUG
-            printf ("[waiting: %d(%d)\"%s\"]\n", alarm->time,
+// #ifdef DEBUG
+            printf ("[waiting: %ld(%ld)\"%s\"]\n", alarm->time,
                 alarm->time - time (NULL), alarm->message);
-#endif
+// #endif
             cond_time.tv_sec = alarm->time;
             cond_time.tv_nsec = 0;
             current_alarm = alarm->time;
@@ -181,12 +160,34 @@ void *alarm_thread (void *arg)
                 if (status != 0)
                     err_abort (status, "Cond timedwait");
             }
-            if (!expired)
-                alarm_insert (alarm);
+            // if (!expired)
+                // alarm_insert (alarm);
         } else
             expired = 1;
         if (expired) {
             printf ("(%d) %s\n", alarm->seconds, alarm->message);
+            if(iter2->link == NULL){
+                alarm_list = NULL;
+            } else {
+                //while not at the end of the list and no node has been removed
+                while(iter2->link!=NULL && !removed){
+                    //if an alarm has the same time, it has been found
+                    if(iter2->time == alarm->time){
+                        //remove from list. If it is at the start update the "HEAD" or array_list
+                        if(prev == NULL){
+                            alarm_list = alarm->link;
+                        //if not at start, remove by changing the previous link to the node after the node being removed
+                        } else {
+                            prev->link = iter2->link;
+                        }
+                        //update boolean to stop searching
+                        removed = 1;
+                    }
+                    //continue traversing the list
+                    prev = iter2;
+                    iter2 = iter2->link;
+                }
+            }
             free (alarm);
         }
     }
