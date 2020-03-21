@@ -53,7 +53,7 @@ void alarm_insert (alarm_t *alarm)
     last = &alarm_list;
     next = *last;
     while (next != NULL) {
-        if (next->time >= alarm->time) {
+        if (next->alarm_id >= alarm->alarm_id) {
             alarm->link = next;
             *last = alarm;
             break;
@@ -70,13 +70,13 @@ void alarm_insert (alarm_t *alarm)
         *last = alarm;
         alarm->link = NULL;
     }
-#ifdef DEBUG
+// #ifdef DEBUG
     printf ("[list: ");
     for (next = alarm_list; next != NULL; next = next->link)
         printf ("(%ld)[\"%s\"] ", next->time,
             next->message);
     printf ("]\n");
-#endif
+// #endif
     /*
      * Wake the alarm thread if it is not busy (that is, if
      * current_alarm is 0, signifying that it's waiting for
@@ -97,9 +97,11 @@ void alarm_insert (alarm_t *alarm)
 void *alarm_thread (void *arg)
 {
     alarm_t *alarm;
+    alarm_t *iterator, *iter2, *smallest, *next; //temp pointers to navigate linked list
+    alarm_t *prev; //holds ref to alarm before current alarm in list in order to remove alarms from the list
     struct timespec cond_time;
     time_t now;
-    int status, expired;
+    int status, expired, removed;
 
     /*
      * Loop forever, processing commands. The alarm thread will
@@ -121,11 +123,75 @@ void *alarm_thread (void *arg)
             status = pthread_cond_wait (&alarm_cond, &alarm_mutex);
             if (status != 0)
                 err_abort (status, "Wait on cond");
-            }
+        }
+
         alarm = alarm_list;
-        alarm_list = alarm->link;
+
+        smallest = alarm_list;
+        iter2 = alarm_list;
+        iterator = alarm_list;
+        
+        // alarm_list = alarm->link;        
+        prev = NULL; //initialize the previous node ref to NULL as at the start of a list, there is no previous
+        removed = 0;
+
+        while(iterator->link != NULL){
+            //if there is an alarm that expires sooner, set smallest to that alarm
+            if(iterator->time < smallest->time){
+                smallest = iterator;
+            }
+            iterator = iterator->link;
+        }
+        if(iterator->time < smallest->time){
+                smallest = iterator;
+        }
+
+        alarm = smallest;
+
+        printf ("[smallest: %ld(%ld)\"%s\"]\n", smallest->time,
+                smallest->time - time (NULL), smallest->message);
+
+
+        if(iter2->link == NULL){
+            alarm_list = NULL;
+            printf ("we have found it: %s\n", smallest->message);
+        } else {
+            //while not at the end of the list and no node has been removed
+            removed = 0;
+            while(iter2 != NULL && !removed){
+                printf ("hit: %s\n", iter2->message);
+                //if an alarm has the same time, it has been found
+                if(iter2->alarm_id == smallest->alarm_id){
+                    //remove from list. If it is at the start update the "HEAD" or array_list
+                    if(prev == NULL){
+                        alarm_list = alarm->link;
+                    //if not at start, remove by changing the previous link to the node after the node being removed
+                    } else {
+                        prev->link = iter2->link;
+                    }
+                    //update boolean to stop searching
+                    removed = 1;
+                    printf ("we have found it and removed it: %s\n", smallest->message);
+                }
+                //continue traversing the list
+                if(iter2->link != NULL) {
+                    prev = iter2;
+                    iter2 = iter2->link;
+                }
+            }
+        }
+
+        next = alarm_list;
+
+        printf ("[list: ");
+        for (next = alarm_list; next != NULL; next = next->link)
+            printf ("(%ld)[\"%s\"] ", next->time,
+            next->message);
+        printf ("]\n");
+        
         now = time (NULL);
         expired = 0;
+
         if (alarm->time > now) {
 #ifdef DEBUG
             printf ("[waiting: %d(%d)\"%s\"]\n", alarm->time,
@@ -137,6 +203,7 @@ void *alarm_thread (void *arg)
             while (current_alarm == alarm->time) {
                 status = pthread_cond_timedwait (
                     &alarm_cond, &alarm_mutex, &cond_time);
+                printf ("current alarm: %s\n", alarm->message);
                 if (status == ETIMEDOUT) {
                     expired = 1;
                     break;
@@ -145,7 +212,7 @@ void *alarm_thread (void *arg)
                     err_abort (status, "Cond timedwait");
             }
             if (!expired)
-                alarm_insert (alarm);
+                alarm_insert(alarm);
         } else
             expired = 1;
         if (expired) {
