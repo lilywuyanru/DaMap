@@ -36,10 +36,18 @@ typedef struct alarm_tag {
     int                 remove; // remove variable 
 } alarm_t;
 
+typedef struct group_id_struct
+{
+    struct group_id    *link;
+    int                 group_id;
+    int                 count; // number of alarms with the same group id
+} group_id;
+
 pthread_mutex_t alarm_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t alarm_cond = PTHREAD_COND_INITIALIZER;
 alarm_t *alarm_list = NULL;
 time_t current_alarm = 0;
+group_id *group_id_list = NULL;
 
 /*
  * Insert alarm entry on list, in order.
@@ -48,6 +56,8 @@ void alarm_insert (alarm_t *alarm)
 {
     int status;
     alarm_t **last, *next;
+    group_id *next_group_id, *new_group_id;
+    int group_id_found; //indicates if the group id already exists in group id list
 
     /*
      * LOCKING PROTOCOL:
@@ -93,6 +103,34 @@ void alarm_insert (alarm_t *alarm)
         status = pthread_cond_signal (&alarm_cond);
         if (status != 0)
             err_abort (status, "Signal cond");
+    }
+
+    // if group id list is empty, we add the group id to the linked list with count of 1
+    if (group_id_list == NULL) {
+        new_group_id = (group_id*)malloc (sizeof (group_id));
+        new_group_id->group_id = alarm->group_id;
+        new_group_id->count++;
+        new_group_id->link = NULL;
+    }
+    // if group id list is not empty
+    else {
+        // iterate through the group id list, if we 
+       for (next_group_id = group_id_list; next_group_id != NULL; next_group_id = next_group_id->link){
+           // if group id for the newly inserted alarm exists in the group id list
+           if(alarm->group_id== next_group_id->group_id)
+                next_group_id->group_id++;     // increase the count for group id by 1
+                group_id_found = 1;             // set the found group id in list variable to 1
+        }
+        // if group id is not found in the 
+        if(group_id_found == 0) {
+            // create new group id and insert to the group id list
+            new_group_id = (group_id*)malloc (sizeof (group_id));
+            new_group_id->group_id = alarm->group_id;
+            new_group_id->count++;
+            new_group_id->link = NULL;
+            // points the next group id (the last group id in the list) to the newly inserted group id
+            next_group_id->link = new_group_id;
+        }
     }
 }
 
@@ -198,30 +236,36 @@ void *display_thread (void *arg) {
 		status = pthread_mutex_unlock (&mutex);
 	            if (status != 0)
 	                err_abort (status, "Unlock mutex");
-	
-        // when change variable is 0, indicates no change
-        if(alarm->change == 0) {
-            printf("\nAlarm(%d) printed by Alarm Display Thread %d at %ld: Group(%d) %s.",
-                alarm->alarm_id, display_thread_id, time (NULL), alarm->message);
-        }
 
-        // when change variable is 1, indicates groupd id has been changed
-        else if(alarm->change == 1) {
-            printf("\nDisplay Thread %d Has Stopped Printing Message of Alarm (%d) at %ld: Changed Group(%d) %s.",
-                display_thread_id, alarm->alarm_id, time (NULL), alarm->message);
-        }
 
-        // when change variable is 2, indicates groupd id has NOT been changed but message has been changed
-        else if(alarm->change == 2) {
-            printf("\nDisplay Thread %d Starts to Print Changed Message Alarm(%d) at %ld: Group(%d) %s.",
-                display_thread_id, alarm->alarm_id, time (NULL), alarm->message);
-        }
+        for (next = alarm_list; next != NULL; next = next->link) {
+
+            if (next->remove == 1) {
+                printf("\nDisplay Thread %d Has Stopped Printing Message of Alarm(%d) at %ld: Group(%d) %s.",
+                display_thread_id, next->alarm_id, time (NULL), next->message);
+            }       
         
-        else if (alarm->remove == 1) {
-            printf("\nDisplay Thread %d Has Stopped Printing Message of Alarm(%d) at %ld: Group(%d) %s.",
-            display_thread_id, alarm->alarm_id, time (NULL), alarm->message);
+            //we only want to print alarms in the same group id
+            if (group_id == next->group_id) {
+                // when change variable is 0, indicates no change
+                if(next->change == 0) {
+                    printf("\nAlarm(%d) printed by Alarm Display Thread %d at %ld: Group(%d) %s.",
+                        next->alarm_id, display_thread_id, time (NULL), next->message);
+                }
+
+                // when change variable is 1, indicates groupd id has been changed
+                else if(next->change == 1) {
+                    printf("\nDisplay Thread %d Has Stopped Printing Message of Alarm (%d) at %ld: Changed Group(%d) %s.",
+                        display_thread_id, next->alarm_id, time (NULL), next->message);
+                }
+
+                // when change variable is 2, indicates groupd id has NOT been changed but message has been changed
+                else if(next->change == 2) {
+                    printf("\nDisplay Thread %d Starts to Print Changed Message Alarm(%d) at %ld: Group(%d) %s.",
+                        display_thread_id, next->alarm_id, time (NULL), next->message);
+                }
+            }
         }
-        
 
 		//unlock reader
         status = pthread_mutex_lock (&alarm_mutex);
@@ -240,6 +284,7 @@ void *display_thread (void *arg) {
 
 		sleep(5); 
     }
+
 }
 
 
@@ -365,11 +410,6 @@ int main (int argc, char *argv[])
             if (status != 0)
                 err_abort (status, "Unlock mutex");
 
-            // printf("semaphore: %d \n", sem);
-
-            // sem_wait(&sem);
-
-            // sem_post(&sem);
 
         }
     }
