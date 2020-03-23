@@ -199,8 +199,6 @@ void *display_thread (void *arg) {
 	            if (status != 0)
 	                err_abort (status, "Unlock mutex");
 	
-
-
         // when change variable is 0, indicates no change
         if(alarm->change == 0) {
             printf("\nAlarm(%d) printed by Alarm Display Thread %d at %ld: Group(%d) %s.",
@@ -219,9 +217,11 @@ void *display_thread (void *arg) {
                 display_thread_id, alarm->alarm_id, time (NULL), alarm->message);
         }
         
-        if (alarm-> remove == 1) {
-            
+        else if (alarm->remove == 1) {
+            printf("\nDisplay Thread %d Has Stopped Printing Message of Alarm(%d) at %ld: Group(%d) %s.",
+            display_thread_id, alarm->alarm_id, time (NULL), alarm->message);
         }
+        
 
 		//unlock reader
         status = pthread_mutex_lock (&alarm_mutex);
