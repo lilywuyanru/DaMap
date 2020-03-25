@@ -36,7 +36,6 @@ pthread_mutex_t alarm_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t alarm_cond = PTHREAD_COND_INITIALIZER;
 alarm_t *alarm_list = NULL;
 time_t current_alarm = 0;
-alarm_t *current = NULL;
 
 /*
  * Insert alarm entry on list, in order.
@@ -97,6 +96,7 @@ void alarm_change(alarm_t *new_values){
     int found = 0;
     alarm_t **last, *next, *prev, *head, **l, *n;
     int old_group_id;
+    int count = 0;
     /*
     * LOCKING PROTOCOL:
     * 
@@ -118,8 +118,14 @@ void alarm_change(alarm_t *new_values){
         last = &next->link;
         next = next->link;
     }
-
     
+    last = &alarm_list;
+    next = *last;
+    while(next != NULL){
+        count++;
+        last = &next->link;
+        next = next->link;
+    }
     l = &alarm_list;
     head = *l;
     n = *l;
@@ -138,15 +144,16 @@ void alarm_change(alarm_t *new_values){
         //if there is more than one element
         } else {
             //while not at the end
-            while(n != NULL ){
+            for(int i = 0; i < count; i++){
                 if(n->group_id == old_group_id){
+                    printf("pls work thx");
                     //if the first element needs to be removed
                     if(prev == NULL){
-                        // head = head->link;
+                        head = head->link;
                         n->group_id = new_values->group_id;
                         // alarm_insert(n);
                     } else {
-                        // prev->link = n->link;
+                        prev->link = n->link;
                         n->group_id = new_values->group_id;
                         // alarm_insert(n);
                     }
@@ -158,12 +165,12 @@ void alarm_change(alarm_t *new_values){
         }
     }
 
-    #ifdef DEBUG
+    // #ifdef DEBUG
         printf ("[list: ");
         for (next = alarm_list; next != NULL; next = next->link)
             printf ("%d(%d)[\"%s\"] group_id:%d ", next->seconds, next->alarm_id, next->message, next->group_id);
         printf ("]\n");
-    #endif
+    // #endif
 }
 
 /*
@@ -172,7 +179,7 @@ void alarm_change(alarm_t *new_values){
 void *alarm_thread (void *arg)
 {
     alarm_t *alarm;
-    alarm_t *iterator, *iter2, *smallest, *next; //temp pointers to navigate linked list
+    alarm_t *iterator, *iter2, *smallest; //temp pointers to navigate linked list
     alarm_t *prev; //holds ref to alarm before current alarm in list in order to remove alarms from the list
     struct timespec cond_time;
     time_t now;
@@ -222,9 +229,36 @@ void *alarm_thread (void *arg)
         }
 
         alarm = smallest;
+        
+        now = time (NULL);
+        expired = 0;
 
-
-        if(iter2->link == NULL){
+        if (alarm->time > now) {
+// #ifdef DEBUG
+            printf ("[waiting: %ld(%ld)\"%s\"]\n", alarm->time,
+                alarm->time - time (NULL), alarm->message);
+// #endif
+            cond_time.tv_sec = alarm->time;
+            cond_time.tv_nsec = 0;
+            current_alarm = alarm->time;
+            while (current_alarm == alarm->time) {
+                status = pthread_cond_timedwait (
+                    &alarm_cond, &alarm_mutex, &cond_time);
+                printf ("current alarm: %s\n", alarm->message);
+                if (status == ETIMEDOUT) {
+                    expired = 1;
+                    break;
+                }
+                if (status != 0)
+                    err_abort (status, "Cond timedwait");
+            }
+        } else {
+            expired = 1;
+        }
+        if (expired) {
+            printf ("(%d) %s %d\n", alarm->seconds, alarm->message, alarm->group_id);
+            free (alarm);
+                    if(iter2->link == NULL){
             alarm_list = NULL;
         } else {
             //while not at the end of the list and no node has been removed
@@ -249,38 +283,6 @@ void *alarm_thread (void *arg)
                 }
             }
         }
-
-        next = alarm_list;
-        
-        now = time (NULL);
-        expired = 0;
-
-        if (alarm->time > now) {
-#ifdef DEBUG
-            printf ("[waiting: %ld(%ld)\"%s\"]\n", alarm->time,
-                alarm->time - time (NULL), alarm->message);
-#endif
-            cond_time.tv_sec = alarm->time;
-            cond_time.tv_nsec = 0;
-            current_alarm = alarm->time;
-            while (current_alarm == alarm->time) {
-                status = pthread_cond_timedwait (
-                    &alarm_cond, &alarm_mutex, &cond_time);
-                printf ("current alarm: %s\n", alarm->message);
-                if (status == ETIMEDOUT) {
-                    expired = 1;
-                    break;
-                }
-                if (status != 0)
-                    err_abort (status, "Cond timedwait");
-            }
-            if (!expired)
-                alarm_insert(alarm);
-        } else
-            expired = 1;
-        if (expired) {
-            printf ("(%d) %s %d\n", alarm->seconds, alarm->message, alarm->group_id);
-            free (alarm);
         }
     }
 }
@@ -333,8 +335,7 @@ int main (int argc, char *argv[])
          * group will hold the group and id. of the form:
          * Group(12) 
          */
-        if (sscanf (line, "%s %s %d %64[^\n]", 
-            request, group, &alarm->seconds, alarm->message) < 1) {
+        if (sscanf (line, "%s %s %d %64[^\n]", request, group, &alarm->seconds, alarm->message) < 1) {
             fprintf (stderr, "Bad command\n");
             free (alarm);
         } else {
