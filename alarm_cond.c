@@ -29,11 +29,13 @@ typedef struct alarm_tag {
     char                message[64];
     int                 alarm_id;
     int                 group_id;
+    int                 change; // change variable indicates the different messages it prints in display_thread 
 } alarm_t;
 
 pthread_mutex_t alarm_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t alarm_cond = PTHREAD_COND_INITIALIZER;
 alarm_t *alarm_list = NULL;
+alarm_t *curr_alarm = NULL;
 time_t current_alarm = 0;
 
 /*
@@ -73,7 +75,7 @@ void alarm_insert (alarm_t *alarm)
 // #ifdef DEBUG
     printf ("[list: ");
     for (next = alarm_list; next != NULL; next = next->link)
-        printf ("(%ld)[\"%s\"] ", next->time,
+        printf ("(%d)[\"%s\"] ", next->change,
             next->message);
     printf ("]\n");
 // #endif
@@ -91,17 +93,126 @@ void alarm_insert (alarm_t *alarm)
     }
 }
 
+void findSmallest() 
+{
+    alarm_t *iterator, *iter2, *smallest, *next; //temp pointers to navigate linked list
+    alarm_t *prev; //holds ref to alarm before current alarm in list in order to remove alarms from the list
+    int removed;
+
+    smallest = alarm_list;
+    iterator = alarm_list;
+    iter2 = alarm_list;
+
+    while(iterator->link != NULL){
+            //if there is an alarm that expires sooner, set smallest to that alarm
+            if(iterator->time < smallest->time){
+                smallest = iterator;
+            }
+            iterator = iterator->link;
+    }
+    if(iterator->time < smallest->time){
+        smallest = iterator;
+    }
+    curr_alarm = smallest;
+
+    printf ("[smallest: %ld(%ld)\"%s\"]\n", curr_alarm->time,
+                curr_alarm->time - time (NULL), curr_alarm->message);
+
+    prev = NULL; //initialize the previous node ref to NULL as at the start of a list, there is no previous
+
+    //while not at the end of the list and no node has been removed
+    removed = 0;
+    while(iter2 != NULL && !removed){
+        printf ("hit: %s\n", iter2->message);
+        //if an alarm has the same time, it has been found
+        if(iter2->alarm_id == smallest->alarm_id){
+            //remove from list. If it is at the start update the "HEAD" or array_list
+            if(prev == NULL) {
+                alarm_list = iter2->link;
+            //if not at start, remove by changing the previous link to the node after the node being removed
+            } else {
+                prev->link = iter2->link;
+            }
+            //update boolean to stop searching
+            removed = 1;
+            printf ("we have found it and removed it: %s\n", smallest->message);
+        }
+        //continue traversing the list
+        if(iter2->link != NULL) {
+            prev = iter2;
+            iter2 = iter2->link;
+        }
+    }
+}
+
+void change_alarm (alarm_t *alarm) 
+{
+    int status;
+    alarm_t **last, *next, *prev;
+
+    next = alarm_list;
+    prev = NULL;
+
+    printf("We have hit here\n");
+
+    /* as long as next is not NULL and the id of next alarm is greater or equal
+    * copy the meassage of next to be the message of alarm
+    */
+        printf("now were getting somewhere\n");
+        while (next != NULL) {
+            if (next->alarm_id == alarm->alarm_id) {
+
+                if (next->group_id == alarm->alarm_id) {
+                    alarm->change = 1;
+                } else {
+                    alarm->change = 2;
+                }
+
+                if (prev == NULL) {
+                    printf("HEREEEEEEE 1\n");
+                    alarm_list = next->link;
+                } else {
+                    printf("HEREEEEEEE 2\n");
+                    prev->link = next->link;
+                }
+                break;
+            }
+            prev = next;
+            next = next->link;
+        }
+ //   }
+    /*
+     * If we reached the end of the list, then there was
+     * not the correct id to change
+     */
+    // if (next == NULL) {
+    //     err_abort (status, "Not found");
+    // }
+
+    next = alarm_list;
+    printf ("[list: ");
+    for (next = alarm_list; next != NULL; next = next->link)
+        printf ("(%d)[\"%s\"] ", next->change,
+        next->message);
+    printf ("]\n");
+
+    if (curr_alarm->alarm_id == alarm->alarm_id) {
+        alarm_insert(alarm);
+        findSmallest();
+    } else {
+        alarm_insert(alarm);
+    }
+
+}
 /*
  * The alarm thread's start routine.
  */
 void *alarm_thread (void *arg)
 {
-    alarm_t *alarm;
-    alarm_t *iterator, *iter2, *smallest, *next; //temp pointers to navigate linked list
-    alarm_t *prev; //holds ref to alarm before current alarm in list in order to remove alarms from the list
+    alarm_t *alarm, *next;
     struct timespec cond_time;
     time_t now;
-    int status, expired, removed;
+    int status, expired;
 
     /*
      * Loop forever, processing commands. The alarm thread will
@@ -125,85 +236,32 @@ void *alarm_thread (void *arg)
                 err_abort (status, "Wait on cond");
         }
 
-        alarm = alarm_list;
+        curr_alarm = alarm_list;             
 
-        smallest = alarm_list;
-        iter2 = alarm_list;
-        iterator = alarm_list;
-        
-        // alarm_list = alarm->link;        
-        prev = NULL; //initialize the previous node ref to NULL as at the start of a list, there is no previous
-        removed = 0;
-
-        while(iterator->link != NULL){
-            //if there is an alarm that expires sooner, set smallest to that alarm
-            if(iterator->time < smallest->time){
-                smallest = iterator;
-            }
-            iterator = iterator->link;
-        }
-        if(iterator->time < smallest->time){
-                smallest = iterator;
-        }
-
-        alarm = smallest;
-
-        printf ("[smallest: %ld(%ld)\"%s\"]\n", smallest->time,
-                smallest->time - time (NULL), smallest->message);
-
-
-        if(iter2->link == NULL){
-            alarm_list = NULL;
-            printf ("we have found it: %s\n", smallest->message);
-        } else {
-            //while not at the end of the list and no node has been removed
-            removed = 0;
-            while(iter2 != NULL && !removed){
-                printf ("hit: %s\n", iter2->message);
-                //if an alarm has the same time, it has been found
-                if(iter2->alarm_id == smallest->alarm_id){
-                    //remove from list. If it is at the start update the "HEAD" or array_list
-                    if(prev == NULL){
-                        alarm_list = alarm->link;
-                    //if not at start, remove by changing the previous link to the node after the node being removed
-                    } else {
-                        prev->link = iter2->link;
-                    }
-                    //update boolean to stop searching
-                    removed = 1;
-                    printf ("we have found it and removed it: %s\n", smallest->message);
-                }
-                //continue traversing the list
-                if(iter2->link != NULL) {
-                    prev = iter2;
-                    iter2 = iter2->link;
-                }
-            }
-        }
+        findSmallest();
 
         next = alarm_list;
-
         printf ("[list: ");
         for (next = alarm_list; next != NULL; next = next->link)
-            printf ("(%ld)[\"%s\"] ", next->time,
+            printf ("(%d)[\"%s\"] ", next->change,
             next->message);
         printf ("]\n");
         
         now = time (NULL);
         expired = 0;
 
-        if (alarm->time > now) {
+        if (curr_alarm->time > now) {
 #ifdef DEBUG
-            printf ("[waiting: %d(%d)\"%s\"]\n", alarm->time,
-                alarm->time - time (NULL), alarm->message);
+            printf ("[waiting: %d(%d)\"%s\"]\n", curr_alarm->time,
+                curr_alarm->time - time (NULL), curr_alarm->message);
 #endif
-            cond_time.tv_sec = alarm->time;
+            cond_time.tv_sec = curr_alarm->time;
             cond_time.tv_nsec = 0;
-            current_alarm = alarm->time;
-            while (current_alarm == alarm->time) {
+            current_alarm = curr_alarm->time;
+            while (current_alarm == curr_alarm->time) {
                 status = pthread_cond_timedwait (
                     &alarm_cond, &alarm_mutex, &cond_time);
-                printf ("current alarm: %s\n", alarm->message);
+                printf ("current alarm: %s\n", curr_alarm->message);
                 if (status == ETIMEDOUT) {
                     expired = 1;
                     break;
@@ -212,12 +270,12 @@ void *alarm_thread (void *arg)
                     err_abort (status, "Cond timedwait");
             }
             if (!expired)
-                alarm_insert(alarm);
+                alarm_insert(curr_alarm);
         } else
             expired = 1;
         if (expired) {
-            printf ("(%d) %s\n", alarm->seconds, alarm->message);
-            free (alarm);
+            printf ("(%d) %s\n", curr_alarm->seconds, curr_alarm->message);
+            free (curr_alarm);
         }
     }
 }
@@ -318,13 +376,24 @@ int main (int argc, char *argv[])
                 alarm->group_id = groupid;
             }
 
+            printf("%s\n",command);
+
             if(strcmp(command, "Change_Alarm") == 0){
                 // do change alarm stuff
+                status = pthread_mutex_lock (&alarm_mutex);
+                if (status != 0)
+                    err_abort (status, "Lock mutex");
+                alarm->time = time (NULL) + alarm->seconds;
+                change_alarm (alarm);
+                status = pthread_mutex_unlock (&alarm_mutex);
+                if (status != 0)
+                    err_abort (status, "Unlock mutex");
             } else if(strcmp(command, "Start_Alarm") == 0){
                 status = pthread_mutex_lock (&alarm_mutex);
                 if (status != 0)
                     err_abort (status, "Lock mutex");
                 alarm->time = time (NULL) + alarm->seconds;
+                alarm->change = 0;
                 /*
                 * Insert the new alarm into the list of alarms,
                 * sorted by expiration time.
