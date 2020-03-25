@@ -146,14 +146,13 @@ void alarm_change(alarm_t *new_values){
             //while not at the end
             for(int i = 0; i < count; i++){
                 if(n->group_id == old_group_id){
-                    printf("pls work thx");
                     //if the first element needs to be removed
                     if(prev == NULL){
-                        head = head->link;
+                        // head = head->link;
                         n->group_id = new_values->group_id;
                         // alarm_insert(n);
                     } else {
-                        prev->link = n->link;
+                        // prev->link = n->link;
                         n->group_id = new_values->group_id;
                         // alarm_insert(n);
                     }
