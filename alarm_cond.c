@@ -41,6 +41,7 @@ typedef struct group_id_struct
     struct group_id    *link;
     int                 group_id;
     int                 count; // number of alarms with the same group id
+    pthread_t           *display_thread;
 } group_id;
 
 pthread_mutex_t alarm_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -142,7 +143,8 @@ void *alarm_thread (void *arg)
     alarm_t *alarm;
     struct timespec cond_time;
     time_t now;
-    int status, expired;
+    int status, expired, group_id_found;
+    group_id *next_group_id;
 
     /*
      * Loop forever, processing commands. The alarm thread will
@@ -154,58 +156,76 @@ void *alarm_thread (void *arg)
     if (status != 0)
         err_abort (status, "Lock mutex");
     while (1) {
+        //display thread creation
+        for (next_group_id = group_id_list; next_group_id != NULL; next_group_id = next_group_id->link){
+            if(next_group_id->group_id == alarm->group_id) {
+                next_group_id->count++;
+                group_id_found = 1;
+                // call display thread
+                display_thread(alarm);
+            }
+        }
+        if (group_id_found == 0) {
+            pthread_t new_display_thread;
+            status = pthread_create(&new_display_thread, NULL, display_thread, alarm);
+            if (status != 0)
+                 err_abort (status, "Create display thread");
+        }      
+
         /*
          * If the alarm list is empty, wait until an alarm is
          * added. Setting current_alarm to 0 informs the insert
          * routine that the thread is not busy.
          */
-        current_alarm = 0;
-        while (alarm_list == NULL) {
-            status = pthread_cond_wait (&alarm_cond, &alarm_mutex);
-            if (status != 0)
-                err_abort (status, "Wait on cond");
-            }
-        alarm = alarm_list;
-        alarm_list = alarm->link;
-        now = time (NULL);
-        expired = 0;
-        if (alarm->time > now) {
-// #ifdef DEBUG
-            printf ("[waiting: %ld(%ld)\"%s\"]\n", alarm->time,
-                alarm->time - time (NULL), alarm->message);
-// #endif
-            cond_time.tv_sec = alarm->time;
-            cond_time.tv_nsec = 0;
-            current_alarm = alarm->time;
-            while (current_alarm == alarm->time) {
-                status = pthread_cond_timedwait (
-                    &alarm_cond, &alarm_mutex, &cond_time);
-                if (status == ETIMEDOUT) {
-                    expired = 1;
-                    break;
-                }
-                if (status != 0)
-                    err_abort (status, "Cond timedwait");
-            }
-            if (!expired)
-                alarm_insert (alarm);
-        } else
-            expired = 1;
-        if (expired) {
-            printf ("(%d) %s\n", alarm->seconds, alarm->message);
-            free (alarm);
-        }
+        // current_alarm = 0;
+        // while (alarm_list == NULL) {
+        //     status = pthread_cond_wait (&alarm_cond, &alarm_mutex);
+        //     if (status != 0)
+        //         err_abort (status, "Wait on cond");
+        // }
+
+        //
+        // alarm = alarm_list;
+        // alarm_list = alarm->link;
+        // now = time (NULL);
+        // expired = 0;
+        // if (alarm->time > now) {
+// // #ifdef DEBUG
+//             printf ("[waiting: %ld(%ld)\"%s\"]\n", alarm->time,
+//                 alarm->time - time (NULL), alarm->message);
+// // #endif
+//             cond_time.tv_sec = alarm->time;
+//             cond_time.tv_nsec = 0;
+//             current_alarm = alarm->time;
+//             while (current_alarm == alarm->time) {
+//                 status = pthread_cond_timedwait (
+//                     &alarm_cond, &alarm_mutex, &cond_time);
+//                 if (status == ETIMEDOUT) {
+//                     expired = 1;
+//                     break;
+//                 }
+//                 if (status != 0)
+//                     err_abort (status, "Cond timedwait");
+//             }
+//             if (!expired)
+//                 alarm_insert (alarm);
+//         } else
+//             expired = 1;
+//         if (expired) {
+//             printf ("(%d) %s\n", alarm->seconds, alarm->message);
+//             free (alarm);
+//         }
     }
 }
 
-void *display_thread (void *arg) {
-    alarm_t *alarm;
+void *display_thread (alarm_t *alarm) {
     struct timespec cond_time;
     time_t now;
     int status;
-    int group_id;        // holds group id that display thread is going to print
-    int display_thread_id; //just gonna leave this for now
+    int current_group_id = alarm->group_id;        // holds group id that display thread is going to print
+    int display_thread_id = pthread_self();
     alarm_t *next;
+    group_id *next_group_id; 
 
     // this is the reader writer model we are trying to implement here
     // rc ++;
@@ -223,20 +243,6 @@ void *display_thread (void *arg) {
     while (1) { // while unchanged
 
        //lock reader
-		status = pthread_mutex_lock (&mutex);
-		if (status != 0)
-		    err_abort (status, "Lock mutex");
-		read_count++;
-		if (read_count == 1)
-		{
-		    status = pthread_mutex_lock (&rw_mutex);
-            if (status != 0)
-                err_abort (status, "Lock mutex");
-		}
-		status = pthread_mutex_unlock (&mutex);
-	            if (status != 0)
-	                err_abort (status, "Unlock mutex");
-
 
         for (next = alarm_list; next != NULL; next = next->link) {
 
@@ -246,7 +252,7 @@ void *display_thread (void *arg) {
             }       
         
             //we only want to print alarms in the same group id
-            if (group_id == next->group_id) {
+            if (current_group_id == next->group_id) {
                 // when change variable is 0, indicates no change
                 if(next->change == 0) {
                     printf("\nAlarm(%d) printed by Alarm Display Thread %d at %ld: Group(%d) %s.",
@@ -257,34 +263,32 @@ void *display_thread (void *arg) {
                 else if(next->change == 1) {
                     printf("\nDisplay Thread %d Has Stopped Printing Message of Alarm (%d) at %ld: Changed Group(%d) %s.",
                         display_thread_id, next->alarm_id, time (NULL), next->message);
+                    next->change = 0;
                 }
 
                 // when change variable is 2, indicates groupd id has NOT been changed but message has been changed
                 else if(next->change == 2) {
                     printf("\nDisplay Thread %d Starts to Print Changed Message Alarm(%d) at %ld: Group(%d) %s.",
                         display_thread_id, next->alarm_id, time (NULL), next->message);
+                    next->change = 0;
                 }
             }
+
+		    sleep(5); 
         }
 
-		//unlock reader
-        status = pthread_mutex_lock (&alarm_mutex);
-	    if (status != 0)
-	        err_abort (status, "Lock mutex");
-		read_count--;
-		if (read_count == 0)
-		{
-		    status = pthread_mutex_unlock (&rw_mutex);
-	        if (status != 0)
-	            err_abort (status, "Unlock mutex");
-		}
-		status = pthread_mutex_unlock (&mutex);
-	        if (status != 0)
-	            err_abort (status, "Unlock mutex");
+        // terminate display thread if no alarm has the current group id we want to print
+        //loop through group id list to find the group id this display thread is currently printing, and find the display thread it corresponds to
+        for (next_group_id = group_id_list; next_group_id != NULL; next_group_id = next_group_id->link){
+            // if the group id in the list equals to the current group id is printing, and there is no alarm with with this group id, then terminate thread
+            if (next_group_id->group_id == current_group_id && next_group_id->count == 0) { 
+                pthread_join(next_group_id->display_thread, NULL);
+            } 
+        }
 
-		sleep(5); 
+    //unlock reader
+    // .....
     }
-
 }
 
 
