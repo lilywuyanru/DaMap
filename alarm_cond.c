@@ -114,16 +114,15 @@ void findSmallest()
         smallest = iterator;
     }
     curr_alarm = smallest;
-
+#ifdef DEBUG
     printf ("[smallest: %ld(%ld)\"%s\"]\n", curr_alarm->time,
                 curr_alarm->time - time (NULL), curr_alarm->message);
-
+#endif
     prev = NULL; //initialize the previous node ref to NULL as at the start of a list, there is no previous
 
     //while not at the end of the list and no node has been removed
     removed = 0;
     while(iter2 != NULL && !removed){
-        printf ("hit: %s\n", iter2->message);
         //if an alarm has the same time, it has been found
         if(iter2->alarm_id == smallest->alarm_id){
             //remove from list. If it is at the start update the "HEAD" or array_list
@@ -135,7 +134,6 @@ void findSmallest()
             }
             //update boolean to stop searching
             removed = 1;
-            printf ("we have found it and removed it: %s\n", smallest->message);
         }
         //continue traversing the list
         if(iter2->link != NULL) {
@@ -153,12 +151,9 @@ void change_alarm (alarm_t *alarm)
     next = alarm_list;
     prev = NULL;
 
-    printf("We have hit here\n");
-
     /* as long as next is not NULL and the id of next alarm is greater or equal
-    * copy the meassage of next to be the message of alarm
+    * copy the message of next to be the message of alarm
     */
-        printf("now were getting somewhere\n");
         while (next != NULL) {
             if (next->alarm_id == alarm->alarm_id) {
 
@@ -169,10 +164,8 @@ void change_alarm (alarm_t *alarm)
                 }
 
                 if (prev == NULL) {
-                    printf("HEREEEEEEE 1\n");
                     alarm_list = next->link;
                 } else {
-                    printf("HEREEEEEEE 2\n");
                     prev->link = next->link;
                 }
                 break;
@@ -180,29 +173,26 @@ void change_alarm (alarm_t *alarm)
             prev = next;
             next = next->link;
         }
- //   }
-    /*
-     * If we reached the end of the list, then there was
-     * not the correct id to change
-     */
-    // if (next == NULL) {
-    //     err_abort (status, "Not found");
-    // }
 
     next = alarm_list;
+#ifdef DEBUG
     printf ("[list: ");
     for (next = alarm_list; next != NULL; next = next->link)
         printf ("(%d)[\"%s\"] ", next->change,
         next->message);
     printf ("]\n");
-
+#endif
     if (curr_alarm->alarm_id == alarm->alarm_id) {
+        if(curr_alarm->group_id != alarm->group_id) {
+            printf("Display Thread <thread-id> Has Stopped Printing Message of Alarm(%d at %ld: Changed Group(%d) %s\n", 
+            alarm->alarm_id, curr_alarm->time, alarm->group_id, alarm->message);
+        }
         alarm_insert(alarm);
         findSmallest();
     } else {
         alarm_insert(alarm);
     }
-
+    printf("Alarm(%d) Changed at %ld: Group(%d) %s\n", alarm->alarm_id, time (NULL), alarm->group_id, alarm->message);
 }
 /*
  * The alarm thread's start routine.
@@ -239,14 +229,14 @@ void *alarm_thread (void *arg)
         curr_alarm = alarm_list;             
 
         findSmallest();
-
+#ifdef DEBUG
         next = alarm_list;
         printf ("[list: ");
         for (next = alarm_list; next != NULL; next = next->link)
             printf ("(%d)[\"%s\"] ", next->change,
             next->message);
         printf ("]\n");
-        
+#endif        
         now = time (NULL);
         expired = 0;
 
@@ -261,7 +251,6 @@ void *alarm_thread (void *arg)
             while (current_alarm == curr_alarm->time) {
                 status = pthread_cond_timedwait (
                     &alarm_cond, &alarm_mutex, &cond_time);
-                printf ("current alarm: %s\n", curr_alarm->message);
                 if (status == ETIMEDOUT) {
                     expired = 1;
                     break;
@@ -375,9 +364,9 @@ int main (int argc, char *argv[])
 				alarm->alarm_id = numid;
                 alarm->group_id = groupid;
             }
-
+#ifdef DEBUG
             printf("%s\n",command);
-
+#endif
             if(strcmp(command, "Change_Alarm") == 0){
                 // do change alarm stuff
                 status = pthread_mutex_lock (&alarm_mutex);
