@@ -24,6 +24,7 @@
  * been on the list.
  */
 sem_t sem;
+
 typedef struct alarm_tag {
     struct alarm_tag    *link;
     int                 seconds;
@@ -35,8 +36,7 @@ typedef struct alarm_tag {
     int                 remove;
 } alarm_t;
 
-typedef struct group_id_struct
-{
+typedef struct group_id_struct {
     struct group_id_struct    *link;
     int                 group_id;
     int                 count; // number of alarms with the same group id
@@ -99,7 +99,7 @@ void alarm_insert (alarm_t *alarm)
      * work), or if the new alarm comes before the one on
      * which the alarm thread is waiting.
      */
-    // // if group id list is empty, we add the group id to the linked list with count of 1
+    // if group id list is empty, we add the group id to the linked list with count of 1
     if (group_id_list == NULL) {
         new_group_id = (group_id*)malloc (sizeof (group_id));
         new_group_id->group_id = alarm->group_id;
@@ -214,8 +214,7 @@ void change_alarm (alarm_t *alarm)
     }
         while (next != NULL) {
             if (next->alarm_id == alarm->alarm_id) {
-
-                if (next->group_id == alarm->alarm_id) {
+                if (next->group_id == alarm->group_id) {
                     alarm->change = 1;
                 } else {
                     alarm->change = 2;
@@ -243,6 +242,9 @@ void change_alarm (alarm_t *alarm)
         if(curr_alarm->group_id != alarm->group_id) {
             printf("Display Thread <thread-id> Has Stopped Printing Message of Alarm(%d at %ld: Changed Group(%d) %s\n", 
             alarm->alarm_id, curr_alarm->time, alarm->group_id, alarm->message);
+            alarm->change = 2;
+        } else {
+            alarm->change = 1; 
         }
         alarm_insert(alarm);
         findSmallest();
