@@ -72,13 +72,13 @@ void alarm_insert (alarm_t *alarm)
         *last = alarm;
         alarm->link = NULL;
     }
-// #ifdef DEBUG
+#ifdef DEBUG
     printf ("[list: ");
     for (next = alarm_list; next != NULL; next = next->link)
         printf ("(%d)[\"%s\"] ", next->change,
             next->message);
     printf ("]\n");
-// #endif
+#endif
     /*
      * Wake the alarm thread if it is not busy (that is, if
      * current_alarm is 0, signifying that it's waiting for
@@ -378,6 +378,7 @@ int main (int argc, char *argv[])
                 if (status != 0)
                     err_abort (status, "Unlock mutex");
             } else if(strcmp(command, "Start_Alarm") == 0){
+                printf("\nAlarm(%d) Inserted by Main Thread %d Into Alarm List at %ld: Group(%d) %s\n", alarm->alarm_id, (int)&thread, time (NULL), alarm->group_id, alarm->message);
                 status = pthread_mutex_lock (&alarm_mutex);
                 if (status != 0)
                     err_abort (status, "Lock mutex");
