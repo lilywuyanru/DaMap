@@ -378,7 +378,7 @@ int main (int argc, char *argv[])
                 if (status != 0)
                     err_abort (status, "Unlock mutex");
             } else if(strcmp(command, "Start_Alarm") == 0){
-                printf("\nAlarm(%d) Inserted by Main Thread %d Into Alarm List at %ld: Group(%d) %s\n", alarm->alarm_id, (int)&thread, time (NULL) + alarm->seconds, alarm->group_id, alarm->message);
+                printf("\nAlarm(%d) Inserted by Main Thread %d Into Alarm List at %ld: Group(%d) %s\n", alarm->alarm_id, (int)&thread, time (NULL), alarm->group_id, alarm->message);
                 status = pthread_mutex_lock (&alarm_mutex);
                 if (status != 0)
                     err_abort (status, "Lock mutex");
