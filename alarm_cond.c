@@ -33,7 +33,7 @@ typedef struct alarm_tag {
     int                 alarm_id;
     int                 group_id;
     int                 change; // change variable indicates the different messages it prints in display_thread 
-    int                 remove;
+    int                 remove; 
 } alarm_t;
 
 typedef struct group_id_struct {
@@ -47,6 +47,7 @@ pthread_mutex_t alarm_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t alarm_cond = PTHREAD_COND_INITIALIZER;
 alarm_t *alarm_list = NULL;
 alarm_t *curr_alarm = NULL;
+//this will contail a list of group ids and data needed for display thread
 group_id *group_id_list = NULL;
 time_t current_alarm = 0;
 
@@ -109,7 +110,7 @@ void alarm_insert (alarm_t *alarm)
     }
     // // if group id list is not empty
     else {
-        // iterate through the group id list, if we 
+        // iterate through the group id list
        for (next_group_id = group_id_list; next_group_id != NULL; next_group_id = next_group_id->link){
            // if group id for the newly inserted alarm exists in the group id list
            if(alarm->group_id == next_group_id->group_id) {
@@ -117,7 +118,7 @@ void alarm_insert (alarm_t *alarm)
                 group_id_found = 1;   // set the found group id in list variable to 1
             }          
         }
-        // if group id is not found in the 
+        // if group id is not found in the list
         if(group_id_found == 0) {
             // create new group id and insert to the group id list
             new_group_id = (group_id*)malloc (sizeof (group_id));
@@ -128,19 +129,20 @@ void alarm_insert (alarm_t *alarm)
             group_id_list = new_group_id;
         }
     }
-
+// #ifdef DEBUG
     printf ("[list: ");
     for (next_group_id = group_id_list; next_group_id != NULL; next_group_id = next_group_id->link)
         printf ("(count: %d) (group_id: %d) ",
             next_group_id->count, next_group_id->group_id);
     printf ("]\n");
-
+// #endif
     if (current_alarm == 0 || alarm->time < current_alarm) {
         current_alarm = alarm->time;
         status = pthread_cond_signal (&alarm_cond);
         if (status != 0)
             err_abort (status, "Signal cond");
     }
+    
 }
 
 void findSmallest() 
@@ -206,18 +208,19 @@ void change_alarm (alarm_t *alarm)
     * copy the message of next to be the message of alarm
     */
 
-    for (next_group_id = group_id_list; next_group_id != NULL; next_group_id = next_group_id->link){
-        // if group id for the newly inserted alarm exists in the group id list
-        if(alarm->group_id == next_group_id->group_id) {
-            next_group_id->count = next_group_id->count - 1;     // decrease the count for group id by 1
-        }          
-    }
         while (next != NULL) {
             if (next->alarm_id == alarm->alarm_id) {
                 if (next->group_id == alarm->group_id) {
                     alarm->change = 1;
                 } else {
                     alarm->change = 2;
+                }
+                for (next_group_id = group_id_list; next_group_id != NULL; next_group_id = next_group_id->link){
+                    // if group id for the newly inserted alarm exists in the group id list
+                    if(next->group_id == next_group_id->group_id) {
+                        printf("i get here count: %d", next_group_id->count);
+                        next_group_id->count = next_group_id->count - 1;     // decrease the count for group id by 1
+                    }          
                 }
 
                 if (prev == NULL) {
