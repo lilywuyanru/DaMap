@@ -241,7 +241,6 @@ void change_alarm (alarm_t *alarm)
 #endif
     if (curr_alarm->alarm_id == alarm->alarm_id) {
         if(curr_alarm->group_id != alarm->group_id) {
-            alarm->change = 2;
             printf("Display Thread <thread-id> Has Stopped Printing Message of Alarm(%d at %ld: Changed Group(%d) %s\n", 
             alarm->alarm_id, curr_alarm->time, alarm->group_id, alarm->message);
         }
