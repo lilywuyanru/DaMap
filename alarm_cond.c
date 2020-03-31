@@ -12,6 +12,7 @@
  */
 #include <pthread.h>
 #include <time.h>
+#include <semaphore.h>
 
 #include "errors.h"
 #include <ctype.h> 
@@ -22,6 +23,7 @@
  * enough, since the "alarm thread" cannot tell how long it has
  * been on the list.
  */
+sem_t sem;
 typedef struct alarm_tag {
     struct alarm_tag    *link;
     int                 seconds;
@@ -30,12 +32,22 @@ typedef struct alarm_tag {
     int                 alarm_id;
     int                 group_id;
     int                 change; // change variable indicates the different messages it prints in display_thread 
+    int                 remove;
 } alarm_t;
+
+typedef struct group_id_struct
+{
+    struct group_id_struct    *link;
+    int                 group_id;
+    int                 count; // number of alarms with the same group id
+    pthread_t           *display_thread;
+} group_id;
 
 pthread_mutex_t alarm_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t alarm_cond = PTHREAD_COND_INITIALIZER;
 alarm_t *alarm_list = NULL;
 alarm_t *curr_alarm = NULL;
+group_id *group_id_list = NULL;
 time_t current_alarm = 0;
 
 /*
@@ -45,6 +57,8 @@ void alarm_insert (alarm_t *alarm)
 {
     int status;
     alarm_t **last, *next;
+    group_id *next_group_id, *new_group_id;
+    int group_id_found = 0; //indicates if the group id already exists in group id list
 
     /*
      * LOCKING PROTOCOL:
@@ -75,8 +89,8 @@ void alarm_insert (alarm_t *alarm)
 // #ifdef DEBUG
     printf ("[list: ");
     for (next = alarm_list; next != NULL; next = next->link)
-        printf ("(%d)[\"%s\"] ", next->change,
-            next->message);
+        printf ("(%ld)[\"%s\"] change: %d", next->time - time(NULL),
+            next->message, next->change);
     printf ("]\n");
 // #endif
     /*
@@ -85,6 +99,42 @@ void alarm_insert (alarm_t *alarm)
      * work), or if the new alarm comes before the one on
      * which the alarm thread is waiting.
      */
+    // // if group id list is empty, we add the group id to the linked list with count of 1
+    if (group_id_list == NULL) {
+        new_group_id = (group_id*)malloc (sizeof (group_id));
+        new_group_id->group_id = alarm->group_id;
+        new_group_id->count++;
+        new_group_id->link = NULL;
+        group_id_list = new_group_id;
+    }
+    // // if group id list is not empty
+    else {
+        // iterate through the group id list, if we 
+       for (next_group_id = group_id_list; next_group_id != NULL; next_group_id = next_group_id->link){
+           // if group id for the newly inserted alarm exists in the group id list
+           if(alarm->group_id == next_group_id->group_id) {
+                next_group_id->count = next_group_id->count + 1;     // increase the count for group id by 1
+                group_id_found = 1;   // set the found group id in list variable to 1
+            }          
+        }
+        // if group id is not found in the 
+        if(group_id_found == 0) {
+            // create new group id and insert to the group id list
+            new_group_id = (group_id*)malloc (sizeof (group_id));
+            new_group_id->group_id = alarm->group_id;
+            new_group_id->count = 1;
+            //add to the start of the list
+            new_group_id->link = group_id_list;
+            group_id_list = new_group_id;
+        }
+    }
+
+    printf ("[list: ");
+    for (next_group_id = group_id_list; next_group_id != NULL; next_group_id = next_group_id->link)
+        printf ("(count: %d) (group_id: %d) ",
+            next_group_id->count, next_group_id->group_id);
+    printf ("]\n");
+
     if (current_alarm == 0 || alarm->time < current_alarm) {
         current_alarm = alarm->time;
         status = pthread_cond_signal (&alarm_cond);
@@ -147,6 +197,7 @@ void change_alarm (alarm_t *alarm)
 {
     int status;
     alarm_t **last, *next, *prev;
+    group_id *next_group_id;
 
     next = alarm_list;
     prev = NULL;
@@ -154,6 +205,13 @@ void change_alarm (alarm_t *alarm)
     /* as long as next is not NULL and the id of next alarm is greater or equal
     * copy the message of next to be the message of alarm
     */
+
+    for (next_group_id = group_id_list; next_group_id != NULL; next_group_id = next_group_id->link){
+        // if group id for the newly inserted alarm exists in the group id list
+        if(alarm->group_id == next_group_id->group_id) {
+            next_group_id->count = next_group_id->count - 1;     // decrease the count for group id by 1
+        }          
+    }
         while (next != NULL) {
             if (next->alarm_id == alarm->alarm_id) {
 
@@ -173,7 +231,6 @@ void change_alarm (alarm_t *alarm)
             prev = next;
             next = next->link;
         }
-
     next = alarm_list;
 #ifdef DEBUG
     printf ("[list: ");
@@ -184,6 +241,7 @@ void change_alarm (alarm_t *alarm)
 #endif
     if (curr_alarm->alarm_id == alarm->alarm_id) {
         if(curr_alarm->group_id != alarm->group_id) {
+            alarm->change = 2;
             printf("Display Thread <thread-id> Has Stopped Printing Message of Alarm(%d at %ld: Changed Group(%d) %s\n", 
             alarm->alarm_id, curr_alarm->time, alarm->group_id, alarm->message);
         }
@@ -383,6 +441,7 @@ int main (int argc, char *argv[])
                     err_abort (status, "Lock mutex");
                 alarm->time = time (NULL) + alarm->seconds;
                 alarm->change = 0;
+
                 /*
                 * Insert the new alarm into the list of alarms,
                 * sorted by expiration time.

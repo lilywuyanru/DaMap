@@ -1,5 +1,6 @@
 {
     "files.associations": {
-        "errors.h": "c"
+        "errors.h": "c",
+        "semaphore.h": "c"
     }
 }
