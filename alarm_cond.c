@@ -199,7 +199,7 @@ void change_alarm (alarm_t *alarm)
 {
     int status;
     alarm_t **last, *next, *prev;
-    group_id *next_group_id;
+    group_id *next_group_id, *previous;
 
     next = alarm_list;
     prev = NULL;
@@ -215,12 +215,20 @@ void change_alarm (alarm_t *alarm)
                 } else {
                     alarm->change = 2;
                 }
+                previous = NULL;
                 for (next_group_id = group_id_list; next_group_id != NULL; next_group_id = next_group_id->link){
                     // if group id for the newly inserted alarm exists in the group id list
                     if(next->group_id == next_group_id->group_id) {
-                        printf("i get here count: %d", next_group_id->count);
-                        next_group_id->count = next_group_id->count - 1;     // decrease the count for group id by 1
-                    }          
+                        next_group_id->count = next_group_id->count - 1;// decrease the count for group id by 1
+                        if(next_group_id->count == 0){
+                            if(previous == NULL){
+                                group_id_list = next_group_id->link;
+                            } else {
+                                previous->link = next_group_id->link;
+                            }
+                        }
+                    }  
+                    previous = next_group_id;        
                 }
 
                 if (prev == NULL) {
@@ -265,6 +273,7 @@ void *alarm_thread (void *arg)
     struct timespec cond_time;
     time_t now;
     int status, expired;
+    group_id *next_group_id, *prev;
 
     /*
      * Loop forever, processing commands. The alarm thread will
@@ -325,6 +334,21 @@ void *alarm_thread (void *arg)
         } else
             expired = 1;
         if (expired) {
+            prev = NULL;
+            for (next_group_id = group_id_list; next_group_id != NULL; next_group_id = next_group_id->link){
+                // find the group id of the alarm we are decreasing
+                if(curr_alarm->group_id == next_group_id->group_id) {
+                    next_group_id->count = next_group_id->count - 1;     // decrease the count for group id by 1
+                } 
+                if(next_group_id->count == 0) {
+                    if(prev == NULL){
+                        group_id_list = next_group_id->link;
+                    } else {
+                        prev->link = next_group_id->link;
+                    }
+                }      
+                prev = next_group_id;  
+            }
             printf ("(%d) %s\n", curr_alarm->seconds, curr_alarm->message);
             free (curr_alarm);
         }
