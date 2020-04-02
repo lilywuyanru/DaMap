@@ -54,20 +54,19 @@ time_t current_alarm = 0;
 void *display_thread (void *arg) {
     int status;
     pthread_t display_thread_id = pthread_self();
-    int thread_group_id = -1;
     group_t *iter; 
-    iter = group_id_list;
-
-    // find group id of certain thread
-    while(iter != NULL){
-        printf("group id: %d", iter->group_id);
-        if(*iter->display_thread == display_thread_id){
-            thread_group_id = iter->group_id;
-        }
-        iter = iter->link;
-    }
 
     while(1) {
+        iter = group_id_list;
+        int thread_group_id = -1;
+        // find group id of certain thread
+        while(iter != NULL){
+            if(*iter->display_thread == display_thread_id){
+
+                thread_group_id = iter->group_id;
+            }
+            iter = iter->link;
+        }
         //while the current alarm belongs to this thread
         if (curr_alarm->group_id == thread_group_id) {
             // lock reader
@@ -158,6 +157,9 @@ void group_id_remove(group_t *group) {
                     //remove from list
                     previous->link = next_group_id->link;
                 }
+                pthread_cancel(*next_group_id->display_thread);
+                pthread_join(*next_group_id->display_thread, NULL);
+                printf("lemme die pls thx");
             }
         }
         //move previous through the list trailing behind next group_id
