@@ -49,6 +49,10 @@ pthread_cond_t alarm_cond = PTHREAD_COND_INITIALIZER;
 alarm_t *alarm_list = NULL;
 time_t current_alarm = 0;
 group_id *group_id_list = NULL;
+sem_t main_semaphore;
+sem_t display_sem;
+// number of readers are currently being used
+int reader_flag = 0;
 
 /*
  * Insert alarm entry on list, in order.
@@ -152,7 +156,7 @@ void *alarm_thread (void *arg)
      * at the start -- it will be unlocked during condition
      * waits, so the main thread can insert alarms.
      */
-    status = pthread_mutex_lock (&alarm_mutex);
+    status = sem_wait(&main_semaphore);
     if (status != 0)
         err_abort (status, "Lock mutex");
     while (1) {
@@ -243,6 +247,11 @@ void *display_thread (alarm_t *alarm) {
     while (1) { // while unchanged
 
        //lock reader
+        sem_wait(&display_sem);
+        reader_flag++;
+        if(reader_flag == 1)
+            sem_wait(&main_semaphore);
+        sem_post(&display_sem);
 
         for (next = alarm_list; next != NULL; next = next->link) {
 
@@ -287,7 +296,12 @@ void *display_thread (alarm_t *alarm) {
         }
 
     //unlock reader
-    // .....
+    
+        sem_wait(&display_sem);
+        reader_flag--;
+        if(reader_flag ==0)
+            sem_post(&main_semaphore);
+        sem_post(&display_sem);
     }
 }
 
@@ -315,7 +329,16 @@ int main (int argc, char *argv[])
     const char delim2[2] = ")";
     alarm_t *alarm;
 
-    sem_open("SEM", 0, 1);
+    // error message for when semaphors are not created
+    if (sem_init(&main_semaphore, 0, 1) < 0) {
+        printf("Error creating semaphore!\n");
+        exit(1);
+    }
+
+    if (sem_init(&display_sem, 0, 1) < 0) {
+        printf("Error creating semaphore!\n");
+        exit(1);
+    }
 
     status = pthread_create (
         &thread, NULL, alarm_thread, NULL);
