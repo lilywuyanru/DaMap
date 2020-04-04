@@ -28,7 +28,7 @@ typedef struct alarm_tag {
     struct alarm_tag    *link;
     int                 seconds;
     time_t              time;   /* seconds from EPOCH */
-    char                message[64];
+    char                message[128];
     int                 alarm_id;
     int                 group_id;
     int                 change; // change variable indicates the different messages it prints in display_thread 
@@ -103,8 +103,7 @@ void *display_thread (void *arg) {
     }
 }
 
-
-	//this method increases the count of the group given. If the group isn't in the list it will add it
+//this method increases the count of the group given. If the group isn't in the list it will add it
 void group_id_insert(group_t *group){
     group_t *next_group_id, *next;
     int group_id_found = 0; //indicates if the group id already exists in group id list
@@ -138,12 +137,13 @@ void group_id_insert(group_t *group){
             group_id_list->display_thread = &disp_thread;
         }
     }
-    #ifdef DEBUG
+    // #ifdef DEBUG
         printf ("[list: ");
         for (next = group_id_list; next != NULL; next = next->link)
             printf ("(group-id: %d)[count:%d], ", next->group_id, next->count);
         printf ("]\n");
-    #endif
+    // #endif
+    printf("hell yea boiz");
 }
 
 // decreases the count of the given group. If the count gets to 0 it will remove
@@ -175,13 +175,14 @@ void group_id_remove(group_t *group) {
         previous = next_group_id;
     }
 
-    #ifdef DEBUG
+    // #ifdef DEBUG
         printf ("[list: ");
         for (next = group_id_list; next != NULL; next = next->link)
             printf ("(group-id: %d)[count:%d], ", next->group_id,
                 next->count);
         printf ("]\n");
-    #endif
+    // #endif
+    printf("heck yea");
 }
 
 /*
@@ -363,6 +364,7 @@ void change_alarm (alarm_t *alarm)
             //create a new group id and insert it into the list
             new_group_id = (group_t*)malloc (sizeof (group_t));
             new_group_id->group_id = alarm->group_id;
+            printf("i get here");
             group_id_insert(new_group_id);
         } else {
             alarm->change = 1; 
@@ -499,7 +501,7 @@ int main (int argc, char *argv[])
 
         /*
          * Parse input line into seconds (%d) and a message
-         * (%64[^\n]), consisting of up to 64 characters
+         * (%128[^\n]), consisting of up to 128 characters
          * separated from the seconds by whitespace.
          * 
          * request will hold the request type as well as the alarm id
@@ -508,7 +510,7 @@ int main (int argc, char *argv[])
          * group will hold the group and id. of the form:
          * Group(12) 
          */
-        if (sscanf (line, "%s %s %d %64[^\n]", 
+        if (sscanf (line, "%s %s %d %128[^\n]", 
             request, group, &alarm->seconds, alarm->message) < 1) {
             fprintf (stderr, "Bad command\n");
             free (alarm);
