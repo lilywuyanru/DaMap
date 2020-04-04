@@ -301,13 +301,11 @@ void change_alarm (alarm_t *alarm)
     pthread_t disp_thread;
     next = alarm_list;
     prev = NULL;
-    int group_id_found;
 
     /* as long as next is not NULL and the id of next alarm is greater or equal
     * copy the message of next to be the message of alarm
     */
         while (next != NULL) {
-            group_id_found = 0;
             // if the group id matches the new group id from alarm, this means the group id has not been changed
             if (next->alarm_id == alarm->alarm_id) {
                 if (next->group_id == alarm->group_id) {
