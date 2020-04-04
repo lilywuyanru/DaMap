@@ -142,13 +142,12 @@ void group_id_insert(group_t *group){
             group_id_list->display_thread = &disp_thread;
         }
     }
-    // #ifdef DEBUG
+    #ifdef DEBUG
         printf ("[list: ");
         for (next = group_id_list; next != NULL; next = next->link)
             printf ("(group-id: %d)[count:%d], ", next->group_id, next->count);
         printf ("]\n");
-    // #endif
-    printf("hell yea boiz");
+    #endif
 }
 
 // decreases the count of the given group. If the count gets to 0 it will remove
@@ -180,14 +179,13 @@ void group_id_remove(group_t *group) {
         previous = next_group_id;
     }
 
-    // #ifdef DEBUG
+    #ifdef DEBUG
         printf ("[list: ");
         for (next = group_id_list; next != NULL; next = next->link)
             printf ("(group-id: %d)[count:%d], ", next->group_id,
                 next->count);
         printf ("]\n");
-    // #endif
-    printf("heck yea");
+    #endif
 }
 
 /*
@@ -600,13 +598,13 @@ int main (int argc, char *argv[])
                         group_id_list = new_group_id;
                 }
 
-// #ifdef DEBUG
+#ifdef DEBUG
                 printf ("[group_struct: ");
                 for (next_group_id = group_id_list; next_group_id != NULL; next_group_id = next_group_id->link)
                     printf ("(count: %d) (group_id: %d) (pthread: %d) ",
                         next_group_id->count, next_group_id->group_id, (int)*next_group_id->display_thread);
                 printf ("]\n");
-// #endif
+#endif
 
                 /*
                 * Insert the new alarm into the list of alarms,
