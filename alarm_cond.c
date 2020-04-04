@@ -86,9 +86,14 @@ void *display_thread (void *arg) {
                 printf("\nAlarm(%d) printed by Alarm Display Thread %d at %ld: Group(%d) %s.",
                     curr_alarm->alarm_id, (int)display_thread_id, time (NULL), curr_alarm->group_id, curr_alarm->message);
             }
-            // when change variable is 2, indicates groupd id has NOT been changed but message has been changed
-            else if(curr_alarm->change == 2) {
+            // when change variable is 1, indicates groupd id has NOT been changed but message has been changed
+            else if(curr_alarm->change == 1) {
                 printf("\nDisplay Thread %d Starts to Print Changed Message Alarm(%d) at %ld: Group(%d) %s.",
+                    (int)display_thread_id, curr_alarm->alarm_id, time (NULL), curr_alarm->group_id, curr_alarm->message);
+                curr_alarm->change = 0;
+            }
+            else if(curr_alarm->change == 2) {
+                 printf("\nDisplay Thread %d Has Stopped Printing Message of Alarm( %d at %ld: Changed Group(%d) %s",
                     (int)display_thread_id, curr_alarm->alarm_id, time (NULL), curr_alarm->group_id, curr_alarm->message);
                 curr_alarm->change = 0;
             }
