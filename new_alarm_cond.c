@@ -60,11 +60,13 @@ void *display_thread (void *arg) {
     group_t *iter; 
 
     while(1) {
+        // synchronizing the reader; in order to display the thread
         sem_wait(&display_sem);
             read_count++;
             if(read_count == 1)
                 sem_wait(&main_semaphore);
         sem_post(&display_sem);
+
         iter = group_id_list;
         int thread_group_id = -1;
         // find group id of certain thread
@@ -97,7 +99,8 @@ void *display_thread (void *arg) {
                 curr_alarm->change = 0;
             }
             sleep(5);
-            //unlock reader
+
+            //unlock the reader sychronizer
             sem_wait(&display_sem);
                 read_count--;
                 if(read_count ==0)
@@ -404,6 +407,7 @@ void *alarm_removal_thread (void *arg)
      * waits, so the main thread can insert alarms.
      */
     while (1) {
+        // lock the semaphore 
         sem_wait(&main_semaphore);
         /*
          * If the alarm list is empty, wait until an alarm is
@@ -463,6 +467,7 @@ void *alarm_removal_thread (void *arg)
             printf ("\n(%d) %s", curr_alarm->seconds, curr_alarm->message);
             free (curr_alarm);
         }
+        // unlock semaphore once thread has executed
         sem_post(&main_semaphore);
     }
 }
@@ -494,6 +499,7 @@ int main (int argc, char *argv[])
     group_t *next_group_id, *new_group_id;
     int group_id_found = 0; //indicates if the group id already exists in group id list
 
+    // initialize the semaphores
     sem_init(&main_semaphore, 0, 1);
     sem_init(&display_sem, 0, 1);
 
@@ -574,6 +580,7 @@ int main (int argc, char *argv[])
 #endif
             if(strcmp(command, "Change_Alarm") == 0){
                 // do change alarm stuff
+                // synchronization of the writers
                 status = sem_wait(&main_semaphore);
                 alarm->time = time (NULL) + alarm->seconds;
                 change_alarm (alarm);
