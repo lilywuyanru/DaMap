@@ -171,7 +171,7 @@ void change_alarm (alarm_t *alarm)
     for (next_group_id = group_id_list; next_group_id != NULL; next_group_id = next_group_id->link){
         // if group id for the newly inserted alarm exists in the group id list
         if(alarm->group_id == next_group_id->group_id) {
-            next_group_id->count = next_group_id->count - 1;     // decrease the count for group id by 1
+            next_group_id->count = next_group_id->count -1;     // decrease the count for group id by 1
         }          
     }
         while (next != NULL) {
@@ -225,7 +225,6 @@ void *display_thread (void *arg) {
 
     // find group id of certain thread
     while(iter != NULL){
-        printf("group id: %d", iter->group_id);
         if(*iter->display_thread == display_thread_id){
             thread_group_id = iter->group_id;
         }
@@ -233,27 +232,24 @@ void *display_thread (void *arg) {
     }
 
     while(1) {
+        while(curr_alarm != NULL) {
         //while the current alarm belongs to this thread
-        if (curr_alarm->group_id == thread_group_id) {
-            // lock reader
-            if(curr_alarm->remove == 1) {
-                printf("\nDisplay Thread %d Has Stopped Printing Message of Alarm(%d) at %ld: Group(%d) %s.",
-                (int)display_thread_id, curr_alarm->alarm_id, time (NULL), curr_alarm->group_id, curr_alarm->message);
-                // need something like contine ?????
+            if (curr_alarm->group_id == thread_group_id) {
+                // lock reader
+                // when change variable is 0, indicates no change
+                if(curr_alarm->change == 0) {
+                    printf("\nAlarm(%d) printed by Alarm Display Thread %d at %ld: Group(%d) %s.",
+                        curr_alarm->alarm_id, (int)display_thread_id, time (NULL), curr_alarm->group_id, curr_alarm->message);
+                }
+                // when change variable is 2, indicates groupd id has NOT been changed but message has been changed
+                else if(curr_alarm->change == 2) {
+                    printf("\nDisplay Thread %d Starts to Print Changed Message Alarm(%d) at %ld: Group(%d) %s.",
+                        (int)display_thread_id, curr_alarm->alarm_id, time (NULL), curr_alarm->group_id, curr_alarm->message);
+                    curr_alarm->change = 0;
+                }
+                sleep(5);
+                //unlock reader
             }
-            // when change variable is 0, indicates no change
-            if(curr_alarm->change == 0) {
-                printf("\nAlarm(%d) printed by Alarm Display Thread %d at %ld: Group(%d) %s.",
-                    curr_alarm->alarm_id, (int)display_thread_id, time (NULL), curr_alarm->group_id, curr_alarm->message);
-            }
-            // when change variable is 2, indicates groupd id has NOT been changed but message has been changed
-            else if(curr_alarm->change == 2) {
-                printf("\nDisplay Thread %d Starts to Print Changed Message Alarm(%d) at %ld: Group(%d) %s.",
-                    (int)display_thread_id, curr_alarm->alarm_id, time (NULL), curr_alarm->group_id, curr_alarm->message);
-                curr_alarm->change = 0;
-            }
-            sleep(5);
-            //unlock reader
         }
     }
 }
@@ -264,7 +260,7 @@ void *display_thread (void *arg) {
 void *alarm_thread (void *arg)
 {
     alarm_t *alarm, *next;
-    group_t *next_group_id;
+    group_t *next_group_id, *prev_group_id;
     struct timespec cond_time;
     time_t now;
     int status, expired;
@@ -286,12 +282,13 @@ void *alarm_thread (void *arg)
          */
         current_alarm = 0;
         while (alarm_list == NULL) {
+            curr_alarm = NULL;
             status = pthread_cond_wait (&alarm_cond, &alarm_mutex);
             if (status != 0)
                 err_abort (status, "Wait on cond");
         }
+        curr_alarm = alarm_list;  
 
-        curr_alarm = alarm_list;             
         findSmallest();
 #ifdef DEBUG
         next = alarm_list;
@@ -327,15 +324,35 @@ void *alarm_thread (void *arg)
         } else
             expired = 1;
         if (expired) {
+            prev_group_id = group_id_list;
             for (next_group_id = group_id_list; next_group_id != NULL; next_group_id = next_group_id->link) {
                 if(curr_alarm->group_id == next_group_id->group_id) {
-                        next_group_id->count -= 1;     // decrease the count for group id by 1
-                        if(next_group_id->count == 0) {
-                           // set prev->link to next_group_id->link
-                        }
+                    printf ("\nDisplay Thread Has Stopped Printing Message of Alarm() at: Group() .");
+                    next_group_id->count -= 1;     // decrease the count for group id by 1
+                    if(next_group_id->count == 0 && group_id_list->link != NULL) {
+                        prev_group_id->link = next_group_id->link;
+                    } else if (next_group_id->count == 0) {
+                        group_id_list = NULL;
+                    }
                 } 
+                prev_group_id = next_group_id;
             }
-            printf ("(%d) %s\n", curr_alarm->seconds, curr_alarm->message);
+
+#ifdef DEBUG
+            printf ("[group_struct: ");
+            for (next_group_id = group_id_list; next_group_id != NULL; next_group_id = next_group_id->link)
+                printf ("(count: %d) (group_id: %d) (pthread: %d) ",
+                    next_group_id->count, next_group_id->group_id, (int)*next_group_id->display_thread);
+            printf ("]\n");
+
+            next = alarm_list;
+            printf ("[list: ");
+            for (next = alarm_list; next != NULL; next = next->link)
+                printf ("(%d)[\"%s\"] ", next->change,
+                next->message);
+            printf ("]\n");
+#endif
+            alarm_list = curr_alarm->link;
             free (curr_alarm);
         }
     }
@@ -472,8 +489,8 @@ int main (int argc, char *argv[])
                             group_id_found = 1;   // set the found group id in list variable to 1
                     }
                 }
-                if(group_id_found == 0) {
-                        //add to the start of the list
+                if (group_id_found == 0) {
+                        //create thread and add to the start of the list
                         status = pthread_create (
                             &disp_thread, NULL, display_thread, NULL);
                         new_group_id->display_thread = &disp_thread;
